@@ -9,10 +9,10 @@ Getting Started with MPLAB-X-IDE - PIC16F877A LCD Sample
 
 ## Create a PIC16F877A project 
 
-+ On your new MPLAB X-IDE **Create A New Project** by clicking on the *File* option or **Ctrl+Shift+N** key options.
++ On your new MPLAB X-IDE **Create A New Project** by clicking on the *File* option or use  **Ctrl+Shift+N** key options.
 + Select **Standalone Project**   
 + On Clicking *Next* Select the **Mid-Range 8-bit MCUs (PIC10/12/16/MCP)** Familiy of MCUs. 
-+ Under *Device* scroll or put **PIC16F877A**  
++ Under *Device* scroll or put in **PIC16F877A**  
 + Select **PICkit3** under *Tools* on clicking *Next* 
 + On the next window select the **XC8** compiler 
 + Finish off by specifying your project directory
@@ -34,7 +34,7 @@ $  xc8 --chip=16F877a  --output=lpp ./src/lcd.c --outdir=./lib
 # Include prebuilt library into project
 + Right-click on project and Select **Properties>Libraries>Add Library/Object File** 
 + Select the `.lpp` that was generated above 
-+ Go back to project window and right-click on **Source Files>Add Existing Item** and select the library source file `<lib>.c` . Ensure *Store path* is set to **Auto**
++ Go back to project window and right-click on **Source Files>Add Existing Item** and select the library source file `<lib>.c` . Ensure *Store path* is set to **Auto** or **Relative** depending on which you're comfortable with.
 + Under the same Source Files options Right click to add a **New>main.c** file
 + Right-click on the **Header Files** option to **Add Existing Item** 
 + Select the header files for the libary `<lib>.h` 
