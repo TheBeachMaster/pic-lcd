@@ -20,13 +20,13 @@ Getting Started with MPLAB-X-IDE - PIC16F877A LCD Sample
 ## Compile Library 
 
 ```bash 
-> xc8 --chip=16F877a  --output=lpp .\lib\lcd.c 
+> xc8 --chip=16F877a  --output=lpp .\lib\lcd.c --outdir=lib
 
 ... For Windows
 ``` 
  
 ```bash 
-$  xc8 --chip=16F877a  --output=lpp ./src/lcd.c 
+$  xc8 --chip=16F877a  --output=lpp ./src/lcd.c --outdir=./lib
  
 ... Unix-like 
 ```
@@ -42,4 +42,6 @@ $  xc8 --chip=16F877a  --output=lpp ./src/lcd.c
   ```c 
   #include "path_to_lib_file.h" 
   ```
-+ **Build**
++ **Build** 
+
+> Generated `.hex` code is found in the `dist` folder
