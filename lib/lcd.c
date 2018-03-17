@@ -1,399 +1,150 @@
-/******************************************************************************
-Software License Agreement
+/*
+ * File: lcd.c
+ *
+ * Copyright (c) 2015 Manolis Agkopian
+ * See the file LICENSE for copying permission.
+ *
+ * LCD library source file.
+ */
+ 
+#define _XTAL_FREQ 8000000
 
-The software supplied herewith by Microchip Technology Incorporated
-(the "Company") for its PIC(R) Microcontroller is intended and
-supplied to you, the Company's customer, for use solely and
-exclusively on Microchip PICmicro Microcontroller products. The
-software is owned by the Company and/or its supplier, and is
-protected under applicable copyright laws. All rights are reserved.
-Any use in violation of the foregoing restrictions may subject the
-user to criminal sanctions under applicable laws, as well as to
-civil liability for the breach of the terms and conditions of this
-license.
-
-THIS SOFTWARE IS PROVIDED IN AN "AS IS" CONDITION. NO WARRANTIES,
-WHETHER EXPRESS, IMPLIED OR STATUTORY, INCLUDING, BUT NOT LIMITED
-TO, IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
-PARTICULAR PURPOSE APPLY TO THIS SOFTWARE. THE COMPANY SHALL NOT,
-IN ANY CIRCUMSTANCES, BE LIABLE FOR SPECIAL, INCIDENTAL OR
-CONSEQUENTIAL DAMAGES, FOR ANY REASON WHATSOEVER.
-*******************************************************************************/
-
+#include <stdbool.h>
 #include <xc.h>
 #include "lcd.h"
-#include <stdint.h>
 
-/* Private Definitions ***********************************************/
-// Define a fast instruction execution time in terms of loop time
-// typically > 43us
-#define LCD_F_INSTR         2000
+LCD lcd;
 
-// Define a slow instruction execution time in terms of loop time
-// typically > 1.35ms
-#define LCD_S_INSTR         6000
-
-// Define the startup time for the LCD in terms of loop time
-// typically > 30ms
-#define LCD_STARTUP         50000
-
-#define LCD_MAX_COLUMN      16
-
-#define LCD_SendData(data) { PMADDR = 0x0001; PMDIN1 = data; LCD_Wait(LCD_F_INSTR); }
-#define LCD_SendCommand(command, delay) { PMADDR = 0x0000; PMDIN1 = command; LCD_Wait(delay); }
-#define LCD_COMMAND_CLEAR_SCREEN        0x01
-#define LCD_COMMAND_RETURN_HOME         0x02
-#define LCD_COMMAND_ENTER_DATA_MODE     0x06
-#define LCD_COMMAND_CURSOR_OFF          0x0C
-#define LCD_COMMAND_CURSOR_ON           0x0F
-#define LCD_COMMAND_MOVE_CURSOR_LEFT    0x10
-#define LCD_COMMAND_MOVE_CURSOR_RIGHT   0x14
-#define LCD_COMMAND_SET_MODE_8_BIT      0x38
-#define LCD_COMMAND_ROW_0_HOME          0x80
-#define LCD_COMMAND_ROW_1_HOME          0xC0
-
-/* Private Functions *************************************************/
-static void LCD_CarriageReturn ( void ) ;
-static void LCD_ShiftCursorLeft ( void ) ;
-static void LCD_ShiftCursorRight ( void ) ;
-static void LCD_ShiftCursorUp ( void ) ;
-static void LCD_ShiftCursorDown ( void ) ;
-static void LCD_Wait ( unsigned long ) ;
-
-/* Private variables ************************************************/
-static uint8_t row ;
-static uint8_t column ;
-/*********************************************************************
- * Function: bool LCD_Initialize(void);
- *
- * Overview: Initializes the LCD screen.  Can take several hundred
- *           milliseconds.
- *
- * PreCondition: none
- *
- * Input: None
- *
- * Output: true if initialized, false otherwise
- *
- ********************************************************************/
-bool LCD_Initialize ( void )
-{
-    PMMODE = 0x03ff ;
-    // Enable PMP Module, No Address & Data Muxing,
-    // Enable RdWr Port, Enable Enb Port, No Chip Select,
-    // Select RdWr and Enb signals Active High
-    PMCON = 0x8383 ;
-    // Enable A0
-    PMAEN = 0x0001 ;
-
-    LCD_Wait ( LCD_STARTUP ) ;
-
-    LCD_SendCommand ( LCD_COMMAND_SET_MODE_8_BIT ,     LCD_F_INSTR + LCD_STARTUP ) ;
-    LCD_SendCommand ( LCD_COMMAND_CURSOR_OFF ,         LCD_F_INSTR ) ;
-    LCD_SendCommand ( LCD_COMMAND_ENTER_DATA_MODE ,    LCD_S_INSTR ) ;
-
-    LCD_ClearScreen ( ) ;
-
-    return true ;
-}
-/*********************************************************************
- * Function: void LCD_PutString(char* inputString, uint16_t length);
- *
- * Overview: Puts a string on the LCD screen.  Unsupported characters will be
- *           discarded.  May block or throw away characters is LCD is not ready
- *           or buffer space is not available.  Will terminate when either a
- *           null terminator character (0x00) is reached or the length number
- *           of characters is printed, which ever comes first.
- *
- * PreCondition: already initialized via LCD_Initialize()
- *
- * Input: char* - string to print
- *        uint16_t - length of string to print
- *
- * Output: None
- *
- ********************************************************************/
-void LCD_PutString ( char* inputString , uint16_t length )
-{
-    while (length--)
-    {
-        switch (*inputString)
-        {
-            case 0x00:
-                return ;
-
-            default:
-                LCD_PutChar ( *inputString++ ) ;
-                break ;
-        }
+void LCD_Out ( char c ) {
+    
+    if ( c & 1 ){
+        *(lcd.PORT) |= 1 << lcd.D4;
     }
-}
-/*********************************************************************
- * Function: void LCD_PutChar(char);
- *
- * Overview: Puts a character on the LCD screen.  Unsupported characters will be
- *           discarded.  May block or throw away characters is LCD is not ready
- *           or buffer space is not available.
- *
- * PreCondition: already initialized via LCD_Initialize()
- *
- * Input: char - character to print
- *
- * Output: None
- *
- ********************************************************************/
-void LCD_PutChar ( char inputCharacter )
-{
-    switch (inputCharacter)
-    {
-        case '\r':
-            LCD_CarriageReturn ( ) ;
-            break ;
-
-        case '\n':
-            if (row == 0)
-            {
-                LCD_ShiftCursorDown ( ) ;
-            }
-            else
-            {
-                LCD_ShiftCursorUp ( ) ;
-            }
-            break ;
-
-        case '\b':
-            LCD_ShiftCursorLeft ( ) ;
-            LCD_PutChar ( ' ' ) ;
-            LCD_ShiftCursorLeft ( ) ;
-            break ;
-
-        default:
-            LCD_SendData ( inputCharacter ) ;
-            column++ ;
-
-            if (column == LCD_MAX_COLUMN)
-            {
-                column = 0 ;
-                if (row == 0)
-                {
-                    LCD_SendCommand ( LCD_COMMAND_ROW_1_HOME , LCD_S_INSTR ) ;
-                    row = 1 ;
-                }
-                else
-                {
-                    LCD_SendCommand ( LCD_COMMAND_ROW_0_HOME , LCD_S_INSTR ) ;
-                    row = 0 ;
-                }
-            }
-            break ;
+    else {
+         *(lcd.PORT) &= ~(1 << lcd.D4);
     }
-}
-/*********************************************************************
- * Function: void LCD_ClearScreen(void);
- *
- * Overview: Clears the screen, if possible.
- *
- * PreCondition: already initialized via LCD_Initialize()
- *
- * Input: None
- *
- * Output: None
- *
- ********************************************************************/
-void LCD_ClearScreen ( void )
-{
-    LCD_SendCommand ( LCD_COMMAND_CLEAR_SCREEN , LCD_S_INSTR ) ;
-    LCD_SendCommand ( LCD_COMMAND_RETURN_HOME ,  LCD_S_INSTR ) ;
 
-    row = 0 ;
-    column = 0 ;
+    if ( c & 2 ) {
+        *(lcd.PORT) |= 1 << lcd.D5;
+    }
+    else {
+        *(lcd.PORT) &= ~(1 << lcd.D5);
+    }
+
+    if ( c & 4 ) {
+        *(lcd.PORT) |= 1 << lcd.D6;
+    }
+    else {
+        *(lcd.PORT) &= ~(1 << lcd.D6);
+    }
+
+    if ( c & 8 ) {
+         *(lcd.PORT) |= 1 << lcd.D7;
+    }
+    else {
+         *(lcd.PORT) &= ~(1 << lcd.D7);
+    }
+
 }
 
+void LCD_Write ( unsigned char c ) {
 
-/*******************************************************************/
-/*******************************************************************/
-/* Private Functions ***********************************************/
-/*******************************************************************/
-/*******************************************************************/
-/*********************************************************************
- * Function: static void LCD_CarriageReturn(void)
- *
- * Overview: Handles a carriage return
- *
- * PreCondition: already initialized via LCD_Initialize()
- *
- * Input: None
- *
- * Output: None
- *
- ********************************************************************/
-static void LCD_CarriageReturn ( void )
-{
-    if (row == 0)
-    {
-        LCD_SendCommand ( LCD_COMMAND_ROW_0_HOME , LCD_S_INSTR ) ;
-    }
-    else
-    {
-        LCD_SendCommand ( LCD_COMMAND_ROW_1_HOME , LCD_S_INSTR ) ;
-    }
-    column = 0 ;
-}
-/*********************************************************************
- * Function: static void LCD_ShiftCursorLeft(void)
- *
- * Overview: Shifts cursor left one spot (wrapping if required)
- *
- * PreCondition: already initialized via LCD_Initialize()
- *
- * Input: None
- *
- * Output: None
- *
- ********************************************************************/
-static void LCD_ShiftCursorLeft ( void )
-{
-    uint8_t i ;
+    *(lcd.PORT) &= ~(1 << lcd.RS); // => RS = 0
+    LCD_Out(c);
 
-    if (column == 0)
-    {
-        if (row == 0)
-        {
-            LCD_SendCommand ( LCD_COMMAND_ROW_1_HOME , LCD_S_INSTR ) ;
-            row = 1 ;
-        }
-        else
-        {
-            LCD_SendCommand ( LCD_COMMAND_ROW_0_HOME , LCD_S_INSTR ) ;
-            row = 0 ;
-        }
+    *(lcd.PORT) |= 1 << lcd.EN;    // => E = 1
+    __delay_ms(4);
+    *(lcd.PORT) &= ~(1 << lcd.EN); // => E = 0
 
-        //Now shift to the end of the row
-        for (i = 0 ; i < ( LCD_MAX_COLUMN - 1 ) ; i++)
-        {
-            LCD_ShiftCursorRight ( ) ;
-        }
-    }
-    else
-    {
-        column-- ;
-        LCD_SendCommand ( LCD_COMMAND_MOVE_CURSOR_LEFT , LCD_F_INSTR ) ;
-    }
 }
-/*********************************************************************
- * Function: static void LCD_ShiftCursorRight(void)
- *
- * Overview: Shifts cursor right one spot (wrapping if required)
- *
- * PreCondition: already initialized via LCD_Initialize()
- *
- * Input: None
- *
- * Output: None
- *
- ********************************************************************/
-static void LCD_ShiftCursorRight ( void )
-{
-    LCD_SendCommand ( LCD_COMMAND_MOVE_CURSOR_RIGHT , LCD_F_INSTR ) ;
-    column++ ;
 
-    if (column == LCD_MAX_COLUMN)
-    {
-        column = 0 ;
-        if (row == 0)
-        {
-            LCD_SendCommand ( LCD_COMMAND_ROW_1_HOME , LCD_S_INSTR ) ;
-            row = 1 ;
-        }
-        else
-        {
-            LCD_SendCommand ( LCD_COMMAND_ROW_0_HOME , LCD_S_INSTR ) ;
-            row = 0 ;
-        }
-    }
-}
-/*********************************************************************
- * Function: static void LCD_ShiftCursorUp(void)
- *
- * Overview: Shifts cursor up one spot (wrapping if required)
- *
- * PreCondition: already initialized via LCD_Initialize()
- *
- * Input: None
- *
- * Output: None
- *
- ********************************************************************/
-static void LCD_ShiftCursorUp ( void )
-{
-    uint8_t i ;
+bool LCD_Init ( LCD display ) {
 
-    for (i = 0 ; i < LCD_MAX_COLUMN ; i++)
-    {
-        LCD_ShiftCursorLeft ( ) ;
-    }
-}
-/*********************************************************************
- * Function: static void LCD_ShiftCursorDown(void)
- *
- * Overview: Shifts cursor down one spot (wrapping if required)
- *
- * PreCondition: already initialized via LCD_Initialize()
- *
- * Input: None
- *
- * Output: None
- *
- ********************************************************************/
-static void LCD_ShiftCursorDown ( void )
-{
-    uint8_t i ;
+    lcd = display;
 
-    for (i = 0 ; i < LCD_MAX_COLUMN ; i++)
-    {
-        LCD_ShiftCursorRight ( ) ;
+    /*
+     * TODO:
+     * The function should clear only the appropriate bits, not the whole PORT
+     *
+     * TODO:
+     * "#if defined" needs to support more microcontrollers that have PORTD and PORTE
+     */
+    if ( lcd.PORT == &PORTA ) {
+        TRISA = 0x00;
     }
+    else if ( lcd.PORT == &PORTB ) {
+        TRISB = 0x00;
+    }
+    else if ( lcd.PORT == &PORTC ) {
+        TRISC = 0x00;
+    }
+    #if defined(_16F877) || defined(_16F877A)
+    else if ( lcd.PORT == &PORTD ) {
+        TRISD = 0x00;
+    }
+    else if ( lcd.PORT == &PORTE ) {
+        TRISE = 0x00;
+    }
+    #endif
+    else {
+        return false;
+    }
+
+    // Give some time to the LCD to start function properly
+    __delay_ms(20);
+
+    // Send reset signal to the LCD
+    LCD_Write(0x03);
+    __delay_ms(5);
+    LCD_Write(0x03);
+    __delay_ms(16);
+    LCD_Write(0x03);
+
+    // Specify the data lenght to 4 bits
+    LCD_Write(0x02);
+
+    // Set interface data length to 8 bits, number of display lines to 2 and font to 5x8 dots
+    LCD_Cmd(0x28);
+
+    // Set cursor to move from left to right
+    LCD_Cmd(0x06);
+
+    LCD_Display(true, false, false); // Turn on display and set cursor off
+
+    LCD_Clear();
+    
+    return true;
 }
-/*********************************************************************
- * Function: static void LCD_Wait(unsigned int B)
- *
- * Overview: A crude wait function that just cycle burns
- *
- * PreCondition: None
- *
- * Input: unsigned int - artibrary delay time based on loop counts.
- *
- * Output: None
- *
- ********************************************************************/
-static void LCD_Wait ( unsigned long delay )
-{
-    while (delay)
-    {
-        Nop();
-        delay-- ;
-    }
+
+void LCD_putc ( char c ) {
+
+   *(lcd.PORT) |= 1 << lcd.RS;   // => RS = 1
+    LCD_Out((c & 0xF0) >> 4);    //Data transfer
+
+    *(lcd.PORT) |= 1 << lcd.EN;
+    __delay_us(40);
+    *(lcd.PORT) &= ~(1 << lcd.EN);
+
+    LCD_Out(c & 0x0F);
+
+    *(lcd.PORT) |= 1 << lcd.EN;
+    __delay_us(40);
+    *(lcd.PORT) &= ~(1 << lcd.EN);
+
 }
-/*********************************************************************
- * Function: void LCD_CursorEnable(bool enable)
- *
- * Overview: Enables/disables the cursor
- *
- * PreCondition: None
- *
- * Input: bool - specifies if the cursor should be on or off
- *
- * Output: None
- *
- ********************************************************************/
-void LCD_CursorEnable ( bool enable )
-{
-    if (enable == true)
-    {
-        LCD_SendCommand ( LCD_COMMAND_CURSOR_ON , LCD_S_INSTR ) ;
+
+void LCD_puts ( char *a ) {
+
+    for ( int i = 0; a[i] != '\0'; ++i ) {
+        LCD_putc(a[i]);
     }
-    else
-    {
-        LCD_SendCommand ( LCD_COMMAND_CURSOR_OFF , LCD_S_INSTR ) ;
+
+}
+
+void LCD_putrs ( const char *a ) {
+
+    for ( int i = 0; a[i] != '\0'; ++i ) {
+        LCD_putc(a[i]);
     }
+
 }
