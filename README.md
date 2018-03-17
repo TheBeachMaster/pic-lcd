@@ -44,4 +44,6 @@ $  xc8 --chip=16F877a  --output=lpp ./src/lcd.c --outdir=./lib
   ```
 + **Build** 
 
-> Generated `.hex` code is found in the `dist` folder
+> Generated `.hex` code is found in the `dist` folder 
+ 
+> Project details can be obtained from [this link](https://electrosome.com/automatic-power-factor-controller-using-microcontroller/) ![schematic diagram](https://electrosome.com/wp-content/uploads/2013/05/Automatic-Power-Factor-Controller-using-PIC-Microcontroller-Circuit-Diagram.jpg) 
